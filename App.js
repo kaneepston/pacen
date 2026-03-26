@@ -185,18 +185,33 @@ export default function App() {
   const [userName, setUserName]     = useState('');
   const [replyIndex, setReplyIndex] = useState(0);
 
-  const scrollRef = useRef(null);
+  const scrollRef      = useRef(null);
+  const scrollToWidget = useRef(false); // arms when widget is added; fires once
+  const widgetPinned   = useRef(false); // locks after first widget scroll
 
-  // Scroll to end on every new message or typing change
+  // Scroll logic — mirrors the web app exactly:
+  //   • Before widget: scroll to end (bottom-anchored chat)
+  //   • Widget added:  one-shot scroll to widget's Y offset (pins it at top)
+  //   • After widget:  scroll to end; stickyHeaderIndices keeps widget at top
   useEffect(() => {
     const t = setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
+      if (!scrollRef.current) return;
+      if (widgetPinned.current) {
+        scrollRef.current.scrollToEnd({ animated: true });
+        return;
+      }
+      if (scrollToWidget.current) {
+        // wait for onLayout on the widget wrapper to fire
+        return;
+      }
+      scrollRef.current.scrollToEnd({ animated: true });
     }, 60);
     return () => clearTimeout(t);
   }, [messages, isTyping]);
 
   const addMsg = (role, text) => {
     const id = uid();
+    if (role === 'widget') scrollToWidget.current = true;
     setMessages(prev => [...prev, { id, role, text }]);
     return id;
   };
@@ -276,8 +291,6 @@ export default function App() {
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
       />
-      <View style={styles.orbTopRight} />
-      <View style={styles.orbBottomLeft} />
 
       <View style={styles.header}>
         <Text style={styles.headerText}>PACEN</Text>
@@ -292,7 +305,21 @@ export default function App() {
         keyboardShouldPersistTaps="handled"
       >
         {messages.map(msg => (
-          <MsgBubble key={msg.id} msg={msg} onConnect={handleConnect} onSkip={handleSkip} />
+          <View
+            key={msg.id}
+            style={msg.role === 'widget' ? styles.widgetStickyOuter : undefined}
+            onLayout={msg.role === 'widget' ? (e) => {
+              if (!scrollToWidget.current) return;
+              const y = e.nativeEvent.layout.y;
+              setTimeout(() => {
+                scrollRef.current?.scrollTo({ y, animated: true });
+                scrollToWidget.current = false;
+                widgetPinned.current   = true;
+              }, 80);
+            } : undefined}
+          >
+            <MsgBubble msg={msg} onConnect={handleConnect} onSkip={handleSkip} />
+          </View>
         ))}
         {isTyping && <TypingIndicator />}
       </ScrollView>
@@ -333,17 +360,6 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFDF9' },
 
-  orbTopRight: {
-    position: 'absolute', top: -80, right: -80,
-    width: 400, height: 400, borderRadius: 200,
-    backgroundColor: 'rgba(232,216,205,0.4)',
-  },
-  orbBottomLeft: {
-    position: 'absolute', bottom: -120, left: -120,
-    width: 500, height: 500, borderRadius: 250,
-    backgroundColor: 'rgba(122,152,165,0.15)',
-  },
-
   header: { paddingTop: 56, paddingBottom: 16, alignItems: 'center' },
   headerText: {
     fontSize: 11, fontWeight: '500', letterSpacing: 4,
@@ -352,6 +368,9 @@ const styles = StyleSheet.create({
 
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingBottom: 120, paddingTop: 8 },
+
+  // Outer wrapper for the sticky widget — solid bg prevents content bleed-through
+  widgetStickyOuter: { backgroundColor: '#F5EFEB' },
 
   // Widget — in chat flow, sticky via stickyHeaderIndices
   // Solid background required so messages scrolling beneath don't show through
