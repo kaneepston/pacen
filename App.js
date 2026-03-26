@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Animated,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -216,13 +217,35 @@ export default function App() {
     }
   };
 
-  // Fire doScroll on every message / typing change
+  // Fire doScroll on every message / typing change, and whenever the
+  // ScrollView is resized (keyboard open/close shrinks/grows the viewport).
   useEffect(() => {
-    if (scrollToWidget.current) return; // waiting for widget layout
+    if (scrollToWidget.current) return;
     const t = setTimeout(() => doScroll(true), 60);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, isTyping]);
+  }, [messages, isTyping, scrollViewH]);
+
+  // Also re-scroll when the keyboard finishes appearing — by then onLayout
+  // has already updated scrollViewHRef and contentHeightRef via their
+  // callbacks, so doScroll uses correct values.
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      if (scrollToWidget.current) return;
+      // Inline scroll so no stale closure — only refs used here.
+      setTimeout(() => {
+        if (!scrollRef.current) return;
+        const cH = contentHeightRef.current;
+        const vH = scrollViewHRef.current;
+        const target = Math.max(0, cH - 2 * vH);
+        scrollRef.current.scrollTo({
+          y: widgetPinned.current ? Math.max(widgetYRef.current, target) : target,
+          animated: true,
+        });
+      }, 80);
+    });
+    return () => sub.remove();
+  }, []); // empty — all access via refs, no stale closure risk
 
   // ── Widget layout callback ────────────────────────────────
   // Fires once when widget View renders and we have its Y in the content.
