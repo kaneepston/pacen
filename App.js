@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Animated,
-  Easing,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -30,7 +29,7 @@ const GENERIC_REPLIES = [
   ()   => `Cardiovascular coherence improves significantly with consistent breathing patterns. I can guide you through that if you'd like.`,
 ];
 
-// ── Typing indicator ────────────────────────────────────
+// ── Typing indicator ─────────────────────────────────────
 function TypingIndicator() {
   const dot0 = useRef(new Animated.Value(0)).current;
   const dot1 = useRef(new Animated.Value(0)).current;
@@ -53,7 +52,7 @@ function TypingIndicator() {
     return () => { a0.stop(); a1.stop(); a2.stop(); };
   }, []);
 
-  const dotStyle = (anim) => ({
+  const dotStyle = anim => ({
     opacity: anim,
     transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
   });
@@ -73,7 +72,7 @@ function TypingIndicator() {
   );
 }
 
-// ── Health card ─────────────────────────────────────────
+// ── Health card ──────────────────────────────────────────
 function HealthCard({ onConnect, onSkip }) {
   return (
     <View style={styles.healthCardWrapper}>
@@ -98,7 +97,7 @@ function HealthCard({ onConnect, onSkip }) {
   );
 }
 
-// ── Heart rate widget ───────────────────────────────────
+// ── Heart rate widget ────────────────────────────────────
 function HeartRateWidget() {
   const [bpm, setBpm] = useState(72);
   const heartScale = useRef(new Animated.Value(1)).current;
@@ -115,45 +114,49 @@ function HeartRateWidget() {
   }, []);
 
   return (
-    <View style={styles.widgetCard}>
-      <View style={styles.widgetRow}>
-        <View style={styles.widgetMetric}>
-          <Animated.Text style={[styles.widgetHeart, { transform: [{ scale: heartScale }] }]}>♥</Animated.Text>
-          <View style={styles.widgetValues}>
-            <Text style={styles.widgetNumber}>{bpm}</Text>
-            <Text style={styles.widgetUnit}>BPM</Text>
+    // Solid background so messages scrolling beneath don't show through
+    <View style={styles.widgetWrapper}>
+      <View style={styles.widgetCard}>
+        <View style={styles.widgetRow}>
+          <View style={styles.widgetMetric}>
+            <Animated.Text style={[styles.widgetHeart, { transform: [{ scale: heartScale }] }]}>♥</Animated.Text>
+            <View style={styles.widgetValues}>
+              <Text style={styles.widgetNumber}>{bpm}</Text>
+              <Text style={styles.widgetUnit}>BPM</Text>
+            </View>
+            <Text style={styles.widgetLabel}>HEART RATE</Text>
           </View>
-          <Text style={styles.widgetLabel}>HEART RATE</Text>
-        </View>
-        <View style={styles.widgetDivider} />
-        <View style={styles.widgetMetric}>
-          <Text style={styles.widgetIcon}>◎</Text>
-          <View style={styles.widgetValues}>
-            <Text style={styles.widgetNumber}>6,842</Text>
-            <Text style={styles.widgetUnit}>steps</Text>
+          <View style={styles.widgetDivider} />
+          <View style={styles.widgetMetric}>
+            <Text style={styles.widgetIcon}>◎</Text>
+            <View style={styles.widgetValues}>
+              <Text style={styles.widgetNumber}>6,842</Text>
+              <Text style={styles.widgetUnit}>steps</Text>
+            </View>
+            <Text style={styles.widgetLabel}>ACTIVITY</Text>
           </View>
-          <Text style={styles.widgetLabel}>ACTIVITY</Text>
-        </View>
-        <View style={styles.widgetDivider} />
-        <View style={styles.widgetMetric}>
-          <Text style={styles.widgetIcon}>◐</Text>
-          <View style={styles.widgetValues}>
-            <Text style={styles.widgetNumber}>7.2</Text>
-            <Text style={styles.widgetUnit}>hrs</Text>
+          <View style={styles.widgetDivider} />
+          <View style={styles.widgetMetric}>
+            <Text style={styles.widgetIcon}>◐</Text>
+            <View style={styles.widgetValues}>
+              <Text style={styles.widgetNumber}>7.2</Text>
+              <Text style={styles.widgetUnit}>hrs</Text>
+            </View>
+            <Text style={styles.widgetLabel}>SLEEP</Text>
           </View>
-          <Text style={styles.widgetLabel}>SLEEP</Text>
         </View>
-      </View>
-      <View style={styles.widgetStatus}>
-        <View style={styles.widgetDot} />
-        <Text style={styles.widgetStatusText}>Live · Apple Health</Text>
+        <View style={styles.widgetStatus}>
+          <View style={styles.widgetDot} />
+          <Text style={styles.widgetStatusText}>Live · Apple Health</Text>
+        </View>
       </View>
     </View>
   );
 }
 
-// ── Message bubble ──────────────────────────────────────
+// ── Message bubble ───────────────────────────────────────
 function MsgBubble({ msg, onConnect, onSkip }) {
+  if (msg.role === 'widget')      return <HeartRateWidget />;
   if (msg.role === 'health-card') return <HealthCard onConnect={onConnect} onSkip={onSkip} />;
   if (msg.role === 'ai') return (
     <View style={styles.aiBubbleWrapper}>
@@ -173,36 +176,24 @@ function MsgBubble({ msg, onConnect, onSkip }) {
   );
 }
 
-// ── App ─────────────────────────────────────────────────
+// ── App ──────────────────────────────────────────────────
 export default function App() {
-  const [messages, setMessages]       = useState(INITIAL_MESSAGES);
-  const [input, setInput]             = useState('');
-  const [isTyping, setIsTyping]       = useState(false);
-  const [step, setStep]               = useState('ask_name');
-  const [userName, setUserName]       = useState('');
-  const [replyIndex, setReplyIndex]   = useState(0);
-  const [widgetShown, setWidgetShown] = useState(false);
+  const [messages, setMessages]     = useState(INITIAL_MESSAGES);
+  const [input, setInput]           = useState('');
+  const [isTyping, setIsTyping]     = useState(false);
+  const [step, setStep]             = useState('ask_name');
+  const [userName, setUserName]     = useState('');
+  const [replyIndex, setReplyIndex] = useState(0);
 
-  const scrollRef  = useRef(null);
-  const widgetAnim = useRef(new Animated.Value(0)).current;
+  const scrollRef = useRef(null);
 
-  // Scroll to end on every new message / typing change
+  // Scroll to end on every new message or typing change
   useEffect(() => {
     const t = setTimeout(() => {
       scrollRef.current?.scrollToEnd({ animated: true });
     }, 60);
     return () => clearTimeout(t);
   }, [messages, isTyping]);
-
-  const showWidget = () => {
-    setWidgetShown(true);
-    Animated.timing(widgetAnim, {
-      toValue: 1,
-      duration: 450,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false, // height animation requires JS driver
-    }).start();
-  };
 
   const addMsg = (role, text) => {
     const id = uid();
@@ -227,7 +218,8 @@ export default function App() {
       `Apple Health connected. Your live data is now syncing — I can see your heart rate, activity, and sleep.`,
       1200,
       () => {
-        showWidget();
+        // Widget appears as a message in the chat flow, just like the web app
+        addMsg('widget');
         pacenSays(
           `What would you like to explore today? I can analyse your sleep quality, activity trends, or cardiovascular patterns.`,
           1600
@@ -268,10 +260,10 @@ export default function App() {
     }
   };
 
-  // Widget animated styles
-  const widgetMaxHeight = widgetAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 140] });
-  const widgetOpacity   = widgetAnim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0, 1] });
-  const widgetTranslateY = widgetAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] });
+  // stickyHeaderIndices pins the widget in place once the scroll passes it,
+  // exactly mirroring the web app's `position: sticky; top: 0` behaviour.
+  const widgetIndex = messages.findIndex(m => m.role === 'widget');
+  const stickyIndices = widgetIndex >= 0 ? [widgetIndex] : [];
 
   return (
     <KeyboardAvoidingView
@@ -287,24 +279,15 @@ export default function App() {
       <View style={styles.orbTopRight} />
       <View style={styles.orbBottomLeft} />
 
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerText}>PACEN</Text>
       </View>
 
-      {/* Widget zone — above ScrollView, never inside the scroll area */}
-      <Animated.View style={[
-        styles.widgetZone,
-        { maxHeight: widgetMaxHeight, opacity: widgetOpacity, transform: [{ translateY: widgetTranslateY }] },
-      ]}>
-        {widgetShown && <HeartRateWidget />}
-      </Animated.View>
-
-      {/* Chat */}
       <ScrollView
         ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        stickyHeaderIndices={stickyIndices}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -314,7 +297,6 @@ export default function App() {
         {isTyping && <TypingIndicator />}
       </ScrollView>
 
-      {/* Input bar */}
       <View style={styles.inputBarWrapper}>
         <BlurView intensity={20} tint="light" style={styles.inputBarBlur}>
           <View style={styles.inputBarInner}>
@@ -368,8 +350,15 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', color: 'rgba(122,152,165,0.5)',
   },
 
-  // Widget
-  widgetZone: { overflow: 'hidden', paddingHorizontal: 24, marginBottom: 4 },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 120, paddingTop: 8 },
+
+  // Widget — in chat flow, sticky via stickyHeaderIndices
+  // Solid background required so messages scrolling beneath don't show through
+  widgetWrapper: {
+    backgroundColor: '#F5EFEB',
+    paddingVertical: 8,
+  },
   widgetCard: {
     backgroundColor: 'rgba(255,255,255,0.55)',
     borderRadius: 24, paddingVertical: 14, paddingHorizontal: 20,
@@ -387,9 +376,6 @@ const styles = StyleSheet.create({
   widgetStatus: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10 },
   widgetDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#86efac', marginRight: 5 },
   widgetStatusText: { fontSize: 10, color: 'rgba(122,152,165,0.45)', letterSpacing: 0.3 },
-
-  scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 120, paddingTop: 8 },
 
   // AI bubble
   aiBubbleWrapper: { alignSelf: 'flex-start', maxWidth: '85%', marginVertical: 4 },
