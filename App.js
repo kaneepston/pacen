@@ -154,10 +154,54 @@ function HeartRateWidget() {
   );
 }
 
+// ── Sleep widget ─────────────────────────────────────────
+function SleepWidget() {
+  const stages = [
+    { label: 'Deep',  value: '1h 48m', pct: 25, color: 'rgba(99,102,241,0.85)'  },
+    { label: 'REM',   value: '1h 30m', pct: 21, color: 'rgba(139,92,246,0.75)'  },
+    { label: 'Light', value: '3h 55m', pct: 54, color: 'rgba(196,181,253,0.95)' },
+  ];
+  return (
+    <View style={styles.sleepCardWrapper}>
+      <View style={styles.sleepCard}>
+        <View style={styles.sleepHeaderRow}>
+          <View>
+            <Text style={styles.sleepCardTitle}>Last Night</Text>
+            <Text style={styles.sleepCardMeta}>11:45 PM — 6:58 AM</Text>
+          </View>
+          <View style={styles.sleepScoreBadge}>
+            <Text style={styles.sleepScoreNum}>82</Text>
+            <Text style={styles.sleepScoreLabel}>SCORE</Text>
+          </View>
+        </View>
+        <Text style={styles.sleepTotal}>
+          7<Text style={styles.sleepTotalUnit}>h </Text>
+          13<Text style={styles.sleepTotalUnit}>m</Text>
+        </Text>
+        <View style={styles.sleepBarTrack}>
+          {stages.map(s => (
+            <View key={s.label} style={[styles.sleepBarSeg, { flex: s.pct, backgroundColor: s.color }]} />
+          ))}
+        </View>
+        <View style={styles.sleepLegend}>
+          {stages.map(s => (
+            <View key={s.label} style={styles.sleepLegendItem}>
+              <View style={[styles.sleepLegendDot, { backgroundColor: s.color }]} />
+              <Text style={styles.sleepLegendLabel}>{s.label}</Text>
+              <Text style={styles.sleepLegendValue}>{s.value}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ── Message bubble ───────────────────────────────────────
 function MsgBubble({ msg, onConnect, onSkip }) {
-  if (msg.role === 'widget')      return <HeartRateWidget />;
-  if (msg.role === 'health-card') return <HealthCard onConnect={onConnect} onSkip={onSkip} />;
+  if (msg.role === 'widget')       return <HeartRateWidget />;
+  if (msg.role === 'sleep-widget') return <SleepWidget />;
+  if (msg.role === 'health-card')  return <HealthCard onConnect={onConnect} onSkip={onSkip} />;
   if (msg.role === 'ai') return (
     <View style={styles.aiBubbleWrapper}>
       <BlurView intensity={60} tint="light" style={styles.aiBubbleBlur}>
@@ -321,9 +365,17 @@ export default function App() {
         () => setTimeout(() => addMsg('health-card'), 500)
       );
     } else if (step === 'chat' || step === 'connected') {
-      const reply = GENERIC_REPLIES[replyIndex % GENERIC_REPLIES.length](userName);
-      setReplyIndex(i => i + 1);
-      pacenSays(reply);
+      if (/\bsleep\b/i.test(text)) {
+        pacenSays(
+          `Here's a breakdown of your sleep data from last night. Your score of 82 shows good recovery — strong REM and deep cycles.`,
+          1300,
+          () => addMsg('sleep-widget')
+        );
+      } else {
+        const reply = GENERIC_REPLIES[replyIndex % GENERIC_REPLIES.length](userName);
+        setReplyIndex(i => i + 1);
+        pacenSays(reply);
+      }
     } else {
       pacenSays(`I'm here to help, ${userName}. Once we set up your health data sync, I can provide much more personalised insights.`);
     }
@@ -396,18 +448,25 @@ export default function App() {
               editable={!isTyping}
               multiline={false}
             />
-            <TouchableOpacity
-              style={styles.sendButton}
-              onPress={handleSend}
-              activeOpacity={0.7}
-              disabled={isTyping || !input.trim()}
-            >
-              <Ionicons
-                name="arrow-up"
-                size={18}
-                color={input.trim() ? 'rgba(122,152,165,0.85)' : 'rgba(122,152,165,0.35)'}
-              />
-            </TouchableOpacity>
+            {input.trim() ? (
+              <TouchableOpacity
+                style={styles.sendButton}
+                onPress={handleSend}
+                activeOpacity={0.7}
+                disabled={isTyping}
+              >
+                <Ionicons name="arrow-up" size={18} color="rgba(122,152,165,0.85)" />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.inputIcons}>
+                <TouchableOpacity style={styles.inputIconBtn} activeOpacity={0.5}>
+                  <Ionicons name="attach" size={20} color="rgba(122,152,165,0.4)" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.inputIconBtn} activeOpacity={0.5}>
+                  <Ionicons name="mic-outline" size={20} color="rgba(122,152,165,0.4)" />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </BlurView>
       </View>
@@ -524,4 +583,47 @@ const styles = StyleSheet.create({
     position: 'absolute', right: 16,
     width: 36, height: 36, alignItems: 'center', justifyContent: 'center',
   },
+  inputIcons: {
+    position: 'absolute', right: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+  },
+  inputIconBtn: {
+    width: 34, height: 34, alignItems: 'center', justifyContent: 'center',
+  },
+
+  // ── Sleep widget ─────────────────────────────────────────
+  sleepCardWrapper: { alignSelf: 'flex-start', width: '90%', marginVertical: 4 },
+  sleepCard: {
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 24, padding: 20,
+    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.4)',
+  },
+  sleepHeaderRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginBottom: 12,
+  },
+  sleepCardTitle: { fontSize: 14, fontWeight: '500', color: 'rgba(24,28,34,0.8)' },
+  sleepCardMeta: { fontSize: 11, color: 'rgba(122,152,165,0.6)', marginTop: 2 },
+  sleepScoreBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(99,102,241,0.07)',
+    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6,
+  },
+  sleepScoreNum: { fontSize: 20, fontWeight: '300', color: 'rgba(99,102,241,0.85)', letterSpacing: -0.5 },
+  sleepScoreLabel: { fontSize: 9, fontWeight: '500', color: 'rgba(99,102,241,0.45)', letterSpacing: 0.6 },
+  sleepTotal: { fontSize: 32, fontWeight: '300', color: 'rgba(24,28,34,0.85)', letterSpacing: -1, marginBottom: 14 },
+  sleepTotalUnit: { fontSize: 16, fontWeight: '300', color: 'rgba(24,28,34,0.4)' },
+  sleepBarTrack: {
+    flexDirection: 'row', height: 6, borderRadius: 3,
+    overflow: 'hidden', marginBottom: 16,
+  },
+  sleepBarSeg: { height: 6 },
+  sleepLegend: { flexDirection: 'row', justifyContent: 'space-between' },
+  sleepLegendItem: { alignItems: 'center', flex: 1 },
+  sleepLegendDot: { width: 6, height: 6, borderRadius: 3, marginBottom: 4 },
+  sleepLegendLabel: {
+    fontSize: 9, fontWeight: '500', color: 'rgba(122,152,165,0.5)',
+    letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 2,
+  },
+  sleepLegendValue: { fontSize: 12, fontWeight: '300', color: 'rgba(24,28,34,0.7)' },
 });
