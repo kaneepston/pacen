@@ -114,7 +114,6 @@ function HeartRateWidget() {
   }, []);
 
   return (
-    // Solid background so messages scrolling beneath don't show through
     <View style={styles.widgetWrapper}>
       <View style={styles.widgetCard}>
         <View style={styles.widgetRow}>
@@ -185,30 +184,62 @@ export default function App() {
   const [userName, setUserName]     = useState('');
   const [replyIndex, setReplyIndex] = useState(0);
 
-  const scrollRef      = useRef(null);
-  const scrollToWidget = useRef(false); // arms when widget is added; fires once
-  const widgetPinned   = useRef(false); // locks after first widget scroll
+  // scrollViewH drives the spacer height; also tracked as ref for the formula
+  const [scrollViewH, setScrollViewH] = useState(0);
 
-  // Scroll logic — mirrors the web app exactly:
-  //   • Before widget: scroll to end (bottom-anchored chat)
-  //   • Widget added:  one-shot scroll to widget's Y offset (pins it at top)
-  //   • After widget:  scroll to end; stickyHeaderIndices keeps widget at top
+  const scrollRef        = useRef(null);
+  const contentHeightRef = useRef(0);   // updated via onContentSizeChange
+  const scrollViewHRef   = useRef(0);   // mirror of scrollViewH state (no stale closure)
+  const widgetYRef       = useRef(0);   // Y offset of widget in scroll content
+  const scrollToWidget   = useRef(false); // one-shot: arms when widget added
+  const widgetPinned     = useRef(false); // locks after first widget scroll
+
+  // ── Scroll formula (mirrors web exactly) ─────────────────
+  // Web: target = scrollHeight - spacerH - clientHeight
+  //   where spacerH = clientHeight
+  // → target = contentH - 2 * viewH
+  // This positions the last message at bottom with padding room.
+  // When widgetPinned, clamp to never go above widgetY.
+  const doScroll = (animated = true) => {
+    if (!scrollRef.current) return;
+    const cH = contentHeightRef.current;
+    const vH = scrollViewHRef.current;
+    const target = Math.max(0, cH - 2 * vH);
+
+    if (widgetPinned.current) {
+      scrollRef.current.scrollTo({
+        y: Math.max(widgetYRef.current, target),
+        animated,
+      });
+    } else {
+      scrollRef.current.scrollTo({ y: target, animated });
+    }
+  };
+
+  // Fire doScroll on every message / typing change
   useEffect(() => {
-    const t = setTimeout(() => {
-      if (!scrollRef.current) return;
-      if (widgetPinned.current) {
-        scrollRef.current.scrollToEnd({ animated: true });
-        return;
-      }
-      if (scrollToWidget.current) {
-        // wait for onLayout on the widget wrapper to fire
-        return;
-      }
-      scrollRef.current.scrollToEnd({ animated: true });
-    }, 60);
+    if (scrollToWidget.current) return; // waiting for widget layout
+    const t = setTimeout(() => doScroll(true), 60);
     return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, isTyping]);
 
+  // ── Widget layout callback ────────────────────────────────
+  // Fires once when widget View renders and we have its Y in the content.
+  // We scroll to that exact Y (spacer guarantees there's enough room),
+  // then set widgetPinned so subsequent messages use the clamped formula.
+  const onWidgetLayout = (e) => {
+    if (!scrollToWidget.current) return;
+    const y = e.nativeEvent.layout.y;
+    widgetYRef.current = y;
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y, animated: true });
+      scrollToWidget.current = false;
+      widgetPinned.current   = true;
+    }, 80);
+  };
+
+  // ── Message helpers ───────────────────────────────────────
   const addMsg = (role, text) => {
     const id = uid();
     if (role === 'widget') scrollToWidget.current = true;
@@ -225,6 +256,7 @@ export default function App() {
     }, delay);
   };
 
+  // ── Handlers ─────────────────────────────────────────────
   const handleConnect = () => {
     setMessages(prev => prev.filter(m => m.role !== 'health-card'));
     addMsg('user', 'Connect');
@@ -233,7 +265,6 @@ export default function App() {
       `Apple Health connected. Your live data is now syncing — I can see your heart rate, activity, and sleep.`,
       1200,
       () => {
-        // Widget appears as a message in the chat flow, just like the web app
         addMsg('widget');
         pacenSays(
           `What would you like to explore today? I can analyse your sleep quality, activity trends, or cardiovascular patterns.`,
@@ -275,9 +306,9 @@ export default function App() {
     }
   };
 
-  // stickyHeaderIndices pins the widget in place once the scroll passes it,
-  // exactly mirroring the web app's `position: sticky; top: 0` behaviour.
-  const widgetIndex = messages.findIndex(m => m.role === 'widget');
+  // stickyHeaderIndices pins the widget at top of the ScrollView once
+  // scrolled past, mirroring the web app's `position: sticky; top: 0`.
+  const widgetIndex   = messages.findIndex(m => m.role === 'widget');
   const stickyIndices = widgetIndex >= 0 ? [widgetIndex] : [];
 
   return (
@@ -303,25 +334,29 @@ export default function App() {
         stickyHeaderIndices={stickyIndices}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          scrollViewHRef.current = h;
+          setScrollViewH(h);
+        }}
+        onContentSizeChange={(_w, h) => {
+          contentHeightRef.current = h;
+        }}
       >
         {messages.map(msg => (
           <View
             key={msg.id}
             style={msg.role === 'widget' ? styles.widgetStickyOuter : undefined}
-            onLayout={msg.role === 'widget' ? (e) => {
-              if (!scrollToWidget.current) return;
-              const y = e.nativeEvent.layout.y;
-              setTimeout(() => {
-                scrollRef.current?.scrollTo({ y, animated: true });
-                scrollToWidget.current = false;
-                widgetPinned.current   = true;
-              }, 80);
-            } : undefined}
+            onLayout={msg.role === 'widget' ? onWidgetLayout : undefined}
           >
             <MsgBubble msg={msg} onConnect={handleConnect} onSkip={handleSkip} />
           </View>
         ))}
         {isTyping && <TypingIndicator />}
+
+        {/* Spacer = viewport height, same as web app.
+            Guarantees widget.y < maxScroll so scrollTo(widget.y) is never clamped. */}
+        <View style={{ height: scrollViewH, flexShrink: 0 }} />
       </ScrollView>
 
       <View style={styles.inputBarWrapper}>
@@ -367,17 +402,18 @@ const styles = StyleSheet.create({
   },
 
   scrollView: { flex: 1 },
+  // paddingBottom: 120 keeps the last message above the input bar.
+  // The spacer View at the end of content handles widget-scroll room separately.
   scrollContent: { paddingHorizontal: 24, paddingBottom: 120, paddingTop: 8 },
 
-  // Outer wrapper for the sticky widget — solid bg prevents content bleed-through
-  widgetStickyOuter: { backgroundColor: '#F5EFEB' },
+  // Outer wrapper for the sticky widget entry.
+  // Must have a solid background so messages scrolling beneath don't bleed through.
+  // Use #FFFDF9 (top of gradient) so it blends with the app background.
+  widgetStickyOuter: { backgroundColor: '#FFFDF9' },
 
-  // Widget — in chat flow, sticky via stickyHeaderIndices
-  // Solid background required so messages scrolling beneath don't show through
-  widgetWrapper: {
-    backgroundColor: '#F5EFEB',
-    paddingVertical: 8,
-  },
+  // Inner wrapper — no background (widgetStickyOuter covers it).
+  // paddingVertical adds space around the card without a visible colour frame.
+  widgetWrapper: { paddingVertical: 8 },
   widgetCard: {
     backgroundColor: 'rgba(255,255,255,0.55)',
     borderRadius: 24, paddingVertical: 14, paddingHorizontal: 20,
